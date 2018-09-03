@@ -34,7 +34,7 @@ def evaluate():
 
 def evaluate_train():
     # Load model
-    weight_path = 'model/09031344_epoch_4_train_loss_3.7933.h5'
+    weight_path = 'model/09031442_epoch_1_train_loss_4.7684.h5'
 
     # Load data
     Sources, Targets = load_train_data()
