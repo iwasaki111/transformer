@@ -28,6 +28,7 @@ class Hyperparams:
     num_heads = 8
     dropout_rate = 0.1
     sinusoid = False # If True, use sinusoid. If false, positional embedding.
+    optimizer = 'ADAM'
     
     
     
