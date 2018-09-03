@@ -8,6 +8,7 @@ import tensorflow as tf
 
 from modules import multi_head_attention, feed_forward, label_smoothing, positional_encoding, make_pos
 
+
 class TrainCallback(tf.keras.callbacks.Callback):
     def __init__(self, predict_model, output_dir):
         self.predict_model = predict_model
@@ -38,32 +39,27 @@ class TransformerModel(object):
         enc = tf.keras.layers.Embedding(self.in_vocab_len, rnn_size)(x_input)
 
         # positional encode
-        # enc = tf.keras.layers.Lambda(lambda x: positional_encoding(x))(enc)
-        # batch_size, sequence_length, num_units = enc.get_shape().as_list()
-        # pos = positional_encoding(batch_size, sequence_length, num_units)
         enc = tf.keras.layers.add([enc, pos])
         enc = tf.keras.layers.Dropout(0.1)(enc)
 
         for i in range(num_blocks):
-            enc = multi_head_attention(enc, enc, 'enc_block_{}'.format(i + 1), num_units=rnn_size, num_heads=num_heads)
+            enc = multi_head_attention(enc, enc, 'enc_block_{}'.format(i + 1), num_units=rnn_size, num_heads=num_heads,
+                                       causality=False)
             enc = feed_forward(inputs=enc, num_units=[1024, 512])
 
         # Decoder
         dec = tf.keras.layers.Embedding(self.out_vocab_len, rnn_size)(y_input)
 
         # positional encode
-        # dec = tf.keras.layers.Lambda(lambda x: positional_encoding(x))(dec)
-        # batch_size, sequence_length, num_units = enc.get_shape().as_list()
-        # pos = positional_encoding(batch_size, sequence_length, num_units)
         dec = tf.keras.layers.add([dec, pos])
 
         dec = tf.keras.layers.Dropout(0.1)(dec)
 
         for i in range(num_blocks):
             dec = multi_head_attention(dec, dec, 'dec_block_{}_1'.format(i + 1), num_units=rnn_size,
-                                       num_heads=num_heads)
+                                       num_heads=num_heads, causality=True)
             dec = multi_head_attention(dec, enc, 'dec_block_{}_2'.format(i + 1), num_units=rnn_size,
-                                       num_heads=num_heads)
+                                       num_heads=num_heads, causality=False)
             dec = feed_forward(inputs=dec, num_units=[1024, 512])
 
         logits = tf.keras.layers.Dense(self.out_vocab_len)(dec)
@@ -84,6 +80,7 @@ class TransformerModel(object):
             _preds = self.predict_model.predict([x, preds, pos], batch_size=batch_size)
             _preds = np.argmax(_preds, axis=-1)
             preds[:, i] = _preds[:, i]
+            print(' '.join(idx2en[idx] for idx in _preds[0, :i]))
 
         for pred in preds:
             texts.append(' '.join(idx2en[idx] for idx in pred).split('</S>')[0].strip())
@@ -136,4 +133,3 @@ def model_test():
 
 if __name__ == '__main__':
     model_test()
-

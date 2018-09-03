@@ -29,7 +29,7 @@ class LayerNormalization(tf.keras.layers.Layer):
         return dict(list(base_config.items()) + list(config.items()))
 
 
-def multi_head_attention(queries, keys, prefix, num_units=512, num_heads=4, dropout_rate=0.1):
+def multi_head_attention(queries, keys, prefix, num_units=512, num_heads=4, causality=False, dropout_rate=0.1):
     _, T, C = queries.get_shape().as_list()
     T = -1 if T is None else T
 
@@ -61,8 +61,16 @@ def multi_head_attention(queries, keys, prefix, num_units=512, num_heads=4, drop
     key_masks = tf.tile(tf.expand_dims(key_masks, 1), [1, tf.shape(queries)[1], 1])  # (h*N, T_q, T_k)
 
     paddings = tf.ones_like(outputs) * (-2 ** 32 + 1)
-    outputs = tf.keras.layers.Lambda(lambda x: tf.where(tf.equal(key_masks, 0), paddings, x))(
-        outputs)  # (h*N, T_q, T_k)
+    outputs = tf.keras.layers.Lambda(lambda x: tf.where(tf.equal(key_masks, 0), paddings, x))(outputs)  # (h*N, T_q, T_k)
+
+    # Causality = Future blinding
+    if causality:
+        diag_vals = tf.ones_like(outputs[0, :, :])  # (T_q, T_k)
+        tril = tf.linalg.LinearOperatorLowerTriangular(diag_vals).to_dense()  # (T_q, T_k)
+        masks = tf.tile(tf.expand_dims(tril, 0), [tf.shape(outputs)[0], 1, 1])  # (h*N, T_q, T_k)
+
+        paddings = tf.ones_like(masks) * (-2 ** 32 + 1)
+        outputs = tf.keras.layers.Lambda(lambda x: tf.where(tf.equal(key_masks, 0), paddings, x))(outputs) # (h*N, T_q, T_k)
 
     # Activation
     outputs = tf.keras.layers.Activation('softmax', name=prefix+'weight_softmax')(outputs)  # (h*N, T_q, T_k)
@@ -88,64 +96,6 @@ def multi_head_attention(queries, keys, prefix, num_units=512, num_heads=4, drop
 
     # Normalize
     outputs = LayerNormalization(name=prefix+'layer_norm')(outputs)
-    return outputs
-
-
-def multi_head_attention_without_dense(queries, keys, block_num, num_units=512, num_heads=4, dropout_rate=0.1):
-    _, T, C = queries.get_shape().as_list()
-    T = -1 if T is None else T
-
-    prefix = 'self_atten_{}_'.format(block_num)
-    # Linear projections
-    Q = queries
-    K = keys
-    V = keys
-
-    # Split and concat
-    Q_ = tf.keras.layers.Lambda(lambda x: tf.concat(tf.split(x, num_heads, axis=2), axis=0),
-                                output_shape=(-1, T, num_units // num_heads), name=prefix+'split_concat_q')(
-        Q)  # (h*N, T_q, C/h)
-    K_ = tf.keras.layers.Lambda(lambda x: tf.concat(tf.split(x, num_heads, axis=2), axis=0),
-                                output_shape=(-1, T, num_units // num_heads), name=prefix+'split_concat_k')(
-        K)  # (h*N, T_q, C/h)
-    V_ = tf.keras.layers.Lambda(lambda x: tf.concat(tf.split(x, num_heads, axis=2), axis=0),
-                                output_shape=(-1, T, num_units // num_heads), name=prefix+'split_concat_v')(V)  # (h*N, T_q, C/h)
-
-    # Multiplication
-    outputs = tf.keras.layers.Lambda(lambda x: tf.matmul(x[0], tf.transpose(x[1], [0, 2, 1])),
-                                     output_shape=(-1, T, T), name=prefix+'Multiplication')([Q_, K_])
-
-    # Scale
-    outputs = tf.keras.layers.Lambda(lambda x: x / (num_units // num_heads ** 0.5), name=prefix+'Scale')(outputs)
-
-    # Key Masking
-    key_masks = tf.sign(tf.abs(tf.reduce_sum(keys, axis=-1)))  # (N, T_k)
-    key_masks = tf.tile(key_masks, [num_heads, 1])  # (h*N, T_k)
-    key_masks = tf.tile(tf.expand_dims(key_masks, 1), [1, tf.shape(queries)[1], 1])  # (h*N, T_q, T_k)
-
-    paddings = tf.ones_like(outputs) * (-2 ** 32 + 1)
-    outputs = tf.keras.layers.Lambda(lambda x: tf.where(tf.equal(key_masks, 0), paddings, x))(
-        outputs)  # (h*N, T_q, T_k)
-
-    # Activation
-    outputs = tf.keras.layers.Activation('softmax', name=prefix+'weight_softmax')(outputs)  # (h*N, T_q, T_k)
-
-    # Query Masking
-    query_masks = tf.sign(tf.abs(tf.reduce_sum(queries, axis=-1)))  # (N, T_q)
-    query_masks = tf.tile(query_masks, [num_heads, 1])  # (h*N, T_q)
-    query_masks = tf.tile(tf.expand_dims(query_masks, -1), [1, 1, tf.shape(keys)[1]])  # (h*N, T_q, T_k)
-    outputs = tf.keras.layers.Lambda(lambda x: x * query_masks, name=prefix+'q_masking')(outputs)  # broadcasting. (N, T_q, C)
-
-    # Weighted sum
-    outputs = tf.keras.layers.Dot(axes=1)([outputs, V_])
-
-    # Restore shape
-    outputs = tf.keras.layers.Lambda(lambda x: tf.concat(tf.split(x, num_heads, axis=0), axis=2),
-                                     output_shape=(-1, T, C), name=prefix+'restore')(outputs)  # (N, T_q, C)
-
-    # Residual connection
-    outputs = tf.keras.layers.Add()([outputs, queries])
-
     return outputs
 
 
