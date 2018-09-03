@@ -6,7 +6,7 @@ from datetime import datetime
 import numpy as np
 import tensorflow as tf
 
-from modules import multi_head_attention, feed_forward, label_smoothing, positional_encoding, make_pos
+from modules import multi_head_attention, feed_forward, label_smoothing, positional_encoding, make_pos, Embedding
 
 
 class TrainCallback(tf.keras.callbacks.Callback):
@@ -36,7 +36,7 @@ class TransformerModel(object):
         pos = tf.keras.layers.Input((None, rnn_size))
 
         # Encoder
-        enc = tf.keras.layers.Embedding(self.in_vocab_len, rnn_size, mask_zero=True)(x_input)
+        enc = Embedding(self.in_vocab_len, rnn_size)(x_input)
 
         # positional encode
         enc = tf.keras.layers.add([enc, pos])
@@ -48,7 +48,7 @@ class TransformerModel(object):
             enc = feed_forward(inputs=enc, num_units=[1024, 512])
 
         # Decoder
-        dec = tf.keras.layers.Embedding(self.out_vocab_len, rnn_size, mask_zero=True)(y_input)
+        dec = Embedding(self.out_vocab_len, rnn_size)(y_input)
 
         # positional encode
         dec = tf.keras.layers.add([dec, pos])

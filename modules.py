@@ -30,6 +30,41 @@ class LayerNormalization(tf.keras.layers.Layer):
         return dict(list(base_config.items()) + list(config.items()))
 
 
+class Embedding(tf.keras.layers.Layer):
+    def __init__(self, vocab_size, num_units, zero_pad=True, scale=True, **kwargs):
+        super(Embedding, self).__init__(**kwargs)
+        self.vocab_size = vocab_size
+        self.num_units = num_units
+        self.zero_pad = zero_pad
+        self.scale = scale
+
+    def build(self, input_shape):
+        self.lookup_table = self.add_weight(name='lookup', shape=[self.vocab_size, self.num_units],
+                                            initializer=tf.keras.initializers.glorot_uniform(), trainable=True,
+                                            dtype='float32')
+        if self.zero_pad:
+            self.lookup_table = tf.concat((tf.zeros(shape=[1, self.num_units]),
+                                           self.lookup_table[1:, :]), 0)
+
+    def call(self, inputs, **kwargs):
+        outputs = tf.nn.embedding_lookup(self.lookup_table, inputs)
+        if self.scale:
+            outputs = outputs * (self.num_units ** 0.5)
+        return outputs
+
+    def compute_output_shape(self, input_shape):
+        return tuple(input_shape[:-1] + [self.vocab_size])
+
+    def get_config(self):
+        config = {'vocab_size': float(self.vocab_size),
+                  'num_units': float(self.num_units),
+                  'zero_pad': float(self.zero_pad),
+                  'scale': float(self.scale),
+                  }
+        base_config = super().get_config()
+        return dict(list(base_config.items()) + list(config.items()))
+
+
 def multi_head_attention(queries, keys, prefix, num_units=512, num_heads=4, causality=False, dropout_rate=0.1):
     _, T, C = queries.get_shape().as_list()
     T = -1 if T is None else T
