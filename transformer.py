@@ -36,7 +36,7 @@ class TransformerModel(object):
         pos = tf.keras.layers.Input((None, rnn_size))
 
         # Encoder
-        enc = tf.keras.layers.Embedding(self.in_vocab_len, rnn_size)(x_input)
+        enc = tf.keras.layers.Embedding(self.in_vocab_len, rnn_size, mask_zero=True)(x_input)
 
         # positional encode
         enc = tf.keras.layers.add([enc, pos])
@@ -48,7 +48,7 @@ class TransformerModel(object):
             enc = feed_forward(inputs=enc, num_units=[1024, 512])
 
         # Decoder
-        dec = tf.keras.layers.Embedding(self.out_vocab_len, rnn_size)(y_input)
+        dec = tf.keras.layers.Embedding(self.out_vocab_len, rnn_size, mask_zero=True)(y_input)
 
         # positional encode
         dec = tf.keras.layers.add([dec, pos])
