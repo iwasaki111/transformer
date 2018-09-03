@@ -77,7 +77,7 @@ def multi_head_attention(queries, keys, prefix, num_units=512, num_heads=4, drop
     outputs = tf.keras.layers.Dropout(dropout_rate)(outputs)
 
     # Weighted sum
-    outputs = tf.keras.layers.Dot(axes=1)([outputs, V_])
+    outputs = tf.keras.layers.Lambda(lambda x: tf.matmul(x[0], x[1]))([outputs, V_])
 
     # Restore shape
     outputs = tf.keras.layers.Lambda(lambda x: tf.concat(tf.split(x, num_heads, axis=0), axis=2),
