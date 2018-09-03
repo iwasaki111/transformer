@@ -106,7 +106,7 @@ def multi_head_attention(queries, keys, prefix, num_units=512, num_heads=4, caus
         masks = tf.tile(tf.expand_dims(tril, 0), [tf.shape(outputs)[0], 1, 1])  # (h*N, T_q, T_k)
 
         paddings = tf.ones_like(masks) * (-2 ** 32 + 1)
-        outputs = Lambda(lambda x: tf.where(tf.equal(key_masks, 0), paddings, x))(outputs)  # (h*N, T_q, T_k)
+        outputs = Lambda(lambda x: tf.where(tf.equal(masks, 0), paddings, x), name=prefix + 'Causality')(outputs)  # (h*N, T_q, T_k)
 
     # Activation
     outputs = tf.keras.layers.Activation('softmax', name=prefix + 'weight_softmax')(outputs)  # (h*N, T_q, T_k)

@@ -86,6 +86,15 @@ class TransformerModel(object):
             texts.append(' '.join(idx2en[idx] for idx in pred).split('</S>')[0].strip())
         return texts
 
+    def translate_with_ans(self, x, y, idx2en, batch_size=4):
+        texts = []
+        pos = make_pos(len(x), self.max_len, self.units)
+        preds = self.predict_model.predict([x, y, pos], batch_size=batch_size)
+        preds = np.argmax(preds, axis=-1)
+        for pred in preds:
+            texts.append(' '.join(idx2en[idx] for idx in pred).split('</S>')[0].strip())
+        return texts
+
     def loss_function(self, inputs):
         logits, label = inputs
         istarget = tf.to_float(tf.not_equal(label, 0))
