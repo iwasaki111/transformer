@@ -34,23 +34,24 @@ def evaluate():
 
 def evaluate_train():
     # Load model
-    weight_path = 'model/09031626_epoch_3_train_loss_2.4798.h5'
+    weight_path = 'model/09031728_epoch_3_train_loss_2.2727.h5'
 
     # Load data
     Sources, Targets = load_train_data()
     de2idx, idx2de = load_de_vocab()
     en2idx, idx2en = load_en_vocab()
+    batch_size = 5
 
     model = TransformerModel(in_vocab_len=len(idx2de), out_vocab_len=len(idx2en), max_len=hp.maxlen)
     model.load_model(weight_path)
 
-    for i in range(32 // hp.batch_size):
-        x = Sources[i*hp.batch_size: (i+1)*hp.batch_size]
-        sources = Sources[i*hp.batch_size: (i+1)*hp.batch_size]
-        targets = Targets[i*hp.batch_size: (i+1)*hp.batch_size]
+    for i in range(5 // batch_size):
+        x = Sources[i*batch_size: (i+1)*batch_size]
+        sources = Sources[i*batch_size: (i+1)*batch_size]
+        targets = Targets[i*batch_size: (i+1)*batch_size]
 
-        preds = model.translate_with_ans(sources, targets, idx2en)
-        # preds = model.translate(x, idx2en)
+        # preds = model.translate_with_ans(sources, targets, idx2en)
+        preds = model.translate(x, idx2en)
 
         for source, target, pred in zip(sources, targets, preds):
             print('source:', ' '.join(idx2de[idx] for idx in source))
