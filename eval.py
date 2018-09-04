@@ -34,7 +34,7 @@ def evaluate():
 
 def evaluate_train():
     # Load model
-    weight_path = 'model/09031728_epoch_3_train_loss_2.2727.h5'
+    weight_path = 'model/09031925_epoch_0_train_loss_5.9855.h5'
 
     # Load data
     Sources, Targets = load_train_data()
@@ -50,8 +50,8 @@ def evaluate_train():
         sources = Sources[i*batch_size: (i+1)*batch_size]
         targets = Targets[i*batch_size: (i+1)*batch_size]
 
-        # preds = model.translate_with_ans(sources, targets, idx2en)
-        preds = model.translate(x, idx2en)
+        preds = model.translate_with_ans(sources, targets, idx2en)
+        # preds = model.translate(x, idx2en)
 
         for source, target, pred in zip(sources, targets, preds):
             print('source:', ' '.join(idx2de[idx] for idx in source))

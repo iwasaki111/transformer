@@ -6,20 +6,40 @@ from datetime import datetime
 import numpy as np
 import tensorflow as tf
 
+from data_load import load_train_data, load_de_vocab, load_en_vocab
 from modules import multi_head_attention, feed_forward, label_smoothing, positional_encoding, make_pos, Embedding
 
 
 class TrainCallback(tf.keras.callbacks.Callback):
-    def __init__(self, predict_model, output_dir):
-        self.predict_model = predict_model
+    def __init__(self, model, output_dir):
+        self.model = model
         self.output_dir = output_dir
+        self.Sources, self.Targets = load_train_data()
+        _, self.idx2de = load_de_vocab()
+        _, self.idx2en = load_en_vocab()
+
         os.makedirs(self.output_dir, exist_ok=True)
+
+    def predict(self):
+        batch_size = 5
+        sources = self.Sources[: batch_size]
+        targets = self.Targets[: batch_size]
+
+        preds1 = self.model.translate(sources, targets, self.idx2en)
+        preds2 = self.model.translate_with_ans(sources, targets, self.idx2en)
+
+        for source, target, pred1, pred2 in zip(sources, targets, preds1, preds2):
+            print('source:', ' '.join(self.idx2de[idx] for idx in source))
+            print('expected:', ' '.join(self.idx2en[idx] for idx in target))
+            print('pred:', pred1)
+            print('pred with ans:', pred2)
+            print()
 
     def on_epoch_end(self, epoch, logs=None):
         time_stamp = datetime.strftime(datetime.now(pytz.timezone('Japan')), '%m%d%H%M')
         save_model_path = '{}_epoch_{}_train_loss_{:.4f}.h5'.format(time_stamp, epoch, logs['loss'])
         save_model_path = os.path.join(self.output_dir, save_model_path)
-        self.predict_model.save_weights(save_model_path)
+        self.model.predict_model.save_weights(save_model_path)
 
 
 class TransformerModel(object):
@@ -29,6 +49,7 @@ class TransformerModel(object):
         self.max_len = max_len
         self.units = units
         self._build(rnn_size=units)
+        # self._build(rnn_size=units, num_blocks=1, num_heads=2)
 
     def _build(self, num_blocks=6, num_heads=8, rnn_size=512):
         x_input = tf.keras.layers.Input((self.max_len,), dtype='int32')
@@ -38,7 +59,7 @@ class TransformerModel(object):
         pos = tf.keras.layers.Input((None, rnn_size))
 
         # Encoder
-        enc = Embedding(self.in_vocab_len, rnn_size)(x_input)
+        enc = Embedding(self.in_vocab_len, rnn_size, scale=True)(x_input)
 
         # positional encode
         enc = tf.keras.layers.add([enc, pos])
@@ -47,10 +68,10 @@ class TransformerModel(object):
         for i in range(num_blocks):
             enc = multi_head_attention(enc, enc, 'enc_block_{}'.format(i + 1), num_units=rnn_size, num_heads=num_heads,
                                        causality=False)
-            enc = feed_forward(inputs=enc, num_units=[1024, 512])
+            enc = feed_forward(inputs=enc, num_units=[4*512, 512])
 
         # Decoder
-        dec = Embedding(self.out_vocab_len, rnn_size)(decoder_input)
+        dec = Embedding(self.out_vocab_len, rnn_size, scale=True)(decoder_input)
 
         # positional encode
         dec = tf.keras.layers.add([dec, pos])
@@ -62,7 +83,7 @@ class TransformerModel(object):
                                        num_heads=num_heads, causality=True)
             dec = multi_head_attention(dec, enc, 'dec_block_{}_2'.format(i + 1), num_units=rnn_size,
                                        num_heads=num_heads, causality=False)
-            dec = feed_forward(inputs=dec, num_units=[1024, 512])
+            dec = feed_forward(inputs=dec, num_units=[4*512, 512])
 
         logits = tf.keras.layers.Dense(self.out_vocab_len)(dec)
         loss = tf.keras.layers.Lambda(self.loss_function, output_shape=(1,), name='loss')([logits, y_input])
@@ -125,7 +146,7 @@ class TransformerModel(object):
         pos = make_pos(len(x), self.max_len, self.units)
 
         opt = self.create_optimizer(learning_rate, optimizer)
-        train_callback = TrainCallback(self.predict_model, output_dir)
+        train_callback = TrainCallback(self, output_dir)
 
         self.train_model.compile(loss=lambda ans, pred: pred, optimizer=opt)
         self.train_model.fit(x=[x, y, pos], y=output_dummy, batch_size=batch_size, epochs=epochs,
