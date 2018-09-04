@@ -21,10 +21,10 @@ class TrainCallback(tf.keras.callbacks.Callback):
         os.makedirs(self.output_dir, exist_ok=True)
 
     def predict(self):
-        batch_size = 5
+        batch_size = 32
         sources = self.Sources[: batch_size]
         targets = self.Targets[: batch_size]
-        preds1 = self.transformerModel.translate(sources, targets, self.idx2en)
+        preds1 = self.transformerModel.translate(sources, self.idx2en)
         preds2 = self.transformerModel.translate_with_ans(sources, targets, self.idx2en)
 
         for source, target, pred1, pred2 in zip(sources, targets, preds1, preds2):
