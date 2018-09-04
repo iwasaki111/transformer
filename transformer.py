@@ -11,8 +11,8 @@ from modules import multi_head_attention, feed_forward, label_smoothing, positio
 
 
 class TrainCallback(tf.keras.callbacks.Callback):
-    def __init__(self, model, output_dir):
-        self.model = model
+    def __init__(self, transformerModel, output_dir):
+        self.transformerModel = transformerModel
         self.output_dir = output_dir
         self.Sources, self.Targets = load_train_data()
         _, self.idx2de = load_de_vocab()
@@ -24,9 +24,8 @@ class TrainCallback(tf.keras.callbacks.Callback):
         batch_size = 5
         sources = self.Sources[: batch_size]
         targets = self.Targets[: batch_size]
-
-        preds1 = self.model.translate(sources, targets, self.idx2en)
-        preds2 = self.model.translate_with_ans(sources, targets, self.idx2en)
+        preds1 = self.transformerModel.translate(sources, targets, self.idx2en)
+        preds2 = self.transformerModel.translate_with_ans(sources, targets, self.idx2en)
 
         for source, target, pred1, pred2 in zip(sources, targets, preds1, preds2):
             print('source:', ' '.join(self.idx2de[idx] for idx in source))
@@ -36,10 +35,11 @@ class TrainCallback(tf.keras.callbacks.Callback):
             print()
 
     def on_epoch_end(self, epoch, logs=None):
+        self.predict()
         time_stamp = datetime.strftime(datetime.now(pytz.timezone('Japan')), '%m%d%H%M')
         save_model_path = '{}_epoch_{}_train_loss_{:.4f}.h5'.format(time_stamp, epoch, logs['loss'])
         save_model_path = os.path.join(self.output_dir, save_model_path)
-        self.model.predict_model.save_weights(save_model_path)
+        self.transformerModel.predict_model.save_weights(save_model_path)
 
 
 class TransformerModel(object):
