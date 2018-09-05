@@ -66,8 +66,12 @@ class Embedding(tf.keras.layers.Layer):
 
 
 def multi_head_attention(queries, keys, prefix, num_units=512, num_heads=4, causality=False, dropout_rate=0.1):
+    def split_concat(x):
+        return tf.concat(tf.split(x, num_heads, axis=2), axis=0)
+
     _, T, C = queries.get_shape().as_list()
     T = -1 if T is None else T
+    head_unit_dim = num_units // num_heads
 
     # Linear projections
     Q = tf.keras.layers.Dense(num_units, activation='relu', name=prefix + 'q_fc')(queries)
@@ -75,21 +79,16 @@ def multi_head_attention(queries, keys, prefix, num_units=512, num_heads=4, caus
     V = tf.keras.layers.Dense(num_units, activation='relu', name=prefix + 'v_fc')(keys)
 
     # Split and concat
-    Q_ = Lambda(lambda x: tf.concat(tf.split(x, num_heads, axis=2), axis=0),
-                output_shape=(-1, T, num_units // num_heads), name=prefix + 'split_concat_q')(
-        Q)  # (h*N, T_q, C/h)
-    K_ = Lambda(lambda x: tf.concat(tf.split(x, num_heads, axis=2), axis=0),
-                output_shape=(-1, T, num_units // num_heads), name=prefix + 'split_concat_k')(
-        K)  # (h*N, T_q, C/h)
-    V_ = Lambda(lambda x: tf.concat(tf.split(x, num_heads, axis=2), axis=0),
-                output_shape=(-1, T, num_units // num_heads), name=prefix + 'split_concat_v')(V)  # (h*N, T_q, C/h)
+    Q_ = Lambda(split_concat, output_shape=(-1, T, head_unit_dim), name=prefix + 'split_concat_q')(Q)  # (h*N, T_q, C/h)
+    K_ = Lambda(split_concat, output_shape=(-1, T, head_unit_dim), name=prefix + 'split_concat_k')(K)  # (h*N, T_q, C/h)
+    V_ = Lambda(split_concat, output_shape=(-1, T, head_unit_dim), name=prefix + 'split_concat_v')(V)  # (h*N, T_q, C/h)
 
     # Multiplication
     outputs = Lambda(lambda x: tf.matmul(x[0], tf.transpose(x[1], [0, 2, 1])),
                      output_shape=(-1, T, T), name=prefix + 'Multiplication')([Q_, K_])
 
     # Scale
-    outputs = Lambda(lambda x: x / (num_units // num_heads ** 0.5), name=prefix + 'Scale')(outputs)
+    outputs = Lambda(lambda x: x / (head_unit_dim ** 0.5), name=prefix + 'Scale')(outputs)
 
     # Key Masking
     key_masks = tf.sign(tf.abs(tf.reduce_sum(keys, axis=-1)))  # (N, T_k)
@@ -106,7 +105,8 @@ def multi_head_attention(queries, keys, prefix, num_units=512, num_heads=4, caus
         masks = tf.tile(tf.expand_dims(tril, 0), [tf.shape(outputs)[0], 1, 1])  # (h*N, T_q, T_k)
 
         paddings = tf.ones_like(masks) * (-2 ** 32 + 1)
-        outputs = Lambda(lambda x: tf.where(tf.equal(masks, 0), paddings, x), name=prefix + 'Causality')(outputs)  # (h*N, T_q, T_k)
+        outputs = Lambda(lambda x: tf.where(tf.equal(masks, 0), paddings, x), name=prefix + 'Causality')(
+            outputs)  # (h*N, T_q, T_k)
 
     # Activation
     outputs = tf.keras.layers.Activation('softmax', name=prefix + 'weight_softmax')(outputs)  # (h*N, T_q, T_k)

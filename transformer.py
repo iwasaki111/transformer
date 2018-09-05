@@ -21,7 +21,7 @@ class TrainCallback(tf.keras.callbacks.Callback):
         os.makedirs(self.output_dir, exist_ok=True)
 
     def predict(self):
-        batch_size = 32
+        batch_size = 5
         sources = self.Sources[: batch_size]
         targets = self.Targets[: batch_size]
         preds1 = self.transformerModel.translate(sources, self.idx2en)
@@ -75,7 +75,6 @@ class TransformerModel(object):
 
         # positional encode
         dec = tf.keras.layers.add([dec, pos])
-
         dec = tf.keras.layers.Dropout(0.1)(dec)
 
         for i in range(num_blocks):
